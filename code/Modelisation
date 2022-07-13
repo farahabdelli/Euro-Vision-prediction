@@ -1,0 +1,249 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# # Import
+
+# In[50]:
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import OneClassSVM
+from sklearn.metrics import classification_report
+from sklearn.model_selection import GridSearchCV
+
+get_ipython().run_line_magic('matplotlib', 'inline')
+pd.options.mode.chained_assignment = None
+
+
+# # Definition des fonctions
+
+# In[55]:
+
+
+#
+def type_categorical_colums(df) :
+    ''' Fonction pour categoriser les colonnes categorielle'''
+    df["country"] = pd.Categorical(df["country"], ordered=False)
+    
+    return df
+
+#
+def preprocess_data(df):
+    ''' Pretraitement pour avoir un dataset pret pour la modélisation'''
+    # suppression de la colonne ID
+    df = df.drop(["id"], axis=1)
+    # suppression de la colonne "country"
+    df = df.drop(["country"], axis=1)
+    
+    # Typage des colonnes
+    #df=type_categorical_colums(df)
+    
+    # one hot encoding
+    #df = pd.get_dummies(df)  
+       
+    return df 
+
+#
+def train_test(df):
+    ''' on utilise year == 2022 pour constituer le dataset de test'''
+    
+    train = df[df['year']!=2022]
+    test = df[df['year']==2022]
+    
+    return train, test
+
+#
+
+def rf_modelisation(x_train, y_train):
+    ''' determination des hyperparametre de RF'''
+    weights = np.linspace(0.1,0.9,100)
+    params = [{
+        "n_estimators": [10, 50, 100],
+        "max_features": [2, 4, 8],
+        "class_weight":[{0:x, 1:1.0-x} for x in weights]
+        }]
+
+    rfCV = GridSearchCV(
+        RandomForestClassifier(),
+        params,
+        scoring="recall",
+        cv=3,
+        n_jobs=-1,
+        return_train_score=True)
+    
+    rfCV = rfCV.fit(x_train, y_train)
+    
+    return rfCV.best_estimator_
+
+#
+def logist_modelisation(x_train, y_train):
+    # grille de valeurs
+    weights = np.linspace(0.1,0.9,100)
+
+    params = [{"C": [0.01, 0.2, 0.5, 1, 5, 10, 20], 
+           "penalty": ["l1", "l2"],
+           'max_iter': [100, 500, 700, 900],
+           "class_weight":[{0:x, 1:1.0-x} for x in weights]
+          }]
+
+    logitCV = GridSearchCV(
+        LogisticRegression(),
+        params,
+        scoring="recall",
+        cv=3,
+        n_jobs=-1,
+        return_train_score=True)
+    
+    logitCV = logitCV.fit(x_train, y_train)
+    
+    return logitCV.best_estimator_
+
+#
+def OneSVM_modelisation(x_train, y_train):
+    # grille de valeurs
+    weights = np.linspace(0.1,0.9,100)
+
+    params = [{"nu": [0.1, 0.2, 0.3, 0.5, 0.6, 0.7, 0.9], 
+              'max_iter': [100, 500, 700, 900],
+           #"class_weight":[{0:x, 1:1.0-x} for x in weights]
+          }]
+
+    outlierCV = GridSearchCV(
+        OneClassSVM(),
+        params,
+        scoring="recall",
+        cv=3,
+        n_jobs=-1,
+        return_train_score=True)
+    
+    outlierCV = outlierCV.fit(x_train, y_train)
+    
+    
+    return outlierCV.best_estimator_
+
+
+# In[56]:
+
+
+# Chargement des données
+data = pd.read_csv("data/features.csv", sep=';',low_memory=False)
+print(len(data))
+
+# pretraitement
+data = preprocess_data(data)
+
+# definition de train et test 
+train, test = train_test(data)
+
+# definition de x et y 
+explicative_columns = [x for x in train.columns if x not in "winner"]
+y_train = train.winner
+x_train = train[explicative_columns]
+#x_train.head()
+
+
+# In[58]:
+
+
+data.info()
+
+
+# In[59]:
+
+
+y_test = test.winner
+x_test = test[explicative_columns]
+
+
+# # Modélisation 
+
+# In[60]:
+
+
+## Random forest
+model_rf = rf_modelisation(x_train, y_train)
+model_rf
+
+
+# In[61]:
+
+
+## Logistic Regression
+model_logist = logist_modelisation(x_train, y_train)
+model_logist
+
+
+# In[62]:
+
+
+## OneSVM
+model_svm = OneSVM_modelisation(x_train, y_train)
+model_svm
+
+
+# # Evaluation
+# ## Random Forest
+
+# In[63]:
+
+
+## RF
+model_rf.fit(x_train, y_train)
+
+# prediction
+y_train_predict = model_rf.predict(x_train)
+y_test_predict = model_rf.predict(x_test)
+
+# Evaluation
+print("-----------------------Training data-----------------------")
+print(classification_report(y_train, y_train_predict))
+print("-------------------------Test data-------------------------")
+print(classification_report(y_test, y_test_predict))
+
+
+# In[ ]:
+
+
+
+
+
+# ## Régression logistique
+
+# In[64]:
+
+
+model_logist.fit(x_train, y_train)
+
+# prediction
+y_train_predict = model_logist.predict(x_train)
+y_test_predict = model_logist.predict(x_test)
+
+# Evaluation
+print("-----------------------Training data-----------------------")
+print(classification_report(y_train, y_train_predict))
+print("-------------------------Test data-------------------------")
+print(classification_report(y_test, y_test_predict))
+
+
+# ## One Class SVM
+
+# In[65]:
+
+
+model_svm.fit(x_train, y_train)
+
+# prediction
+y_train_predict = model_svm.predict(x_train)
+y_test_predict = model_svm.predict(x_test)
+
+# Evaluation
+print("-----------------------Training data-----------------------")
+print(classification_report(y_train, y_train_predict))
+print("-------------------------Test data-------------------------")
+print(classification_report(y_test, y_test_predict))
+
